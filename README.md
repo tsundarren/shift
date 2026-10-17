@@ -5,10 +5,7 @@
 A scheduling engine that assigns staff to rotations (tasks or stations) across a week or two,
 respecting hard rules, optimizing soft goals, and explaining its decisions.
 
-**All data is synthetic.** The project is inspired by an internal scheduling tool I built at work, but it is a
-from-scratch reimplementation: invented people, stations, and rules, and no proprietary material.
-
-Developed with AI assistance (Claude); design decisions are documented below.
+**All data is synthetic.** The project is reimplementation inspired by an internal scheduling tool I built at work.
 
 **Status:** Milestone 1 of 4: domain model, synthetic data generator, independent validator, greedy baseline,
 and quality metrics. The optimization solver, explanations, API, and dashboard are on the [Roadmap](#roadmap).
@@ -20,18 +17,9 @@ and quality metrics. The optimization solver, explanations, API, and dashboard a
 - **Employees** have a list of trained rotations (the checkboxes), a free-text **rank**, a hex **color**, availability
   windows by weekday (so part-day staff can cover some blocks but not others), approved days off, and preferred days off.
 - **Trainees:** an employee can be assigned to a rotation they're still learning, paired with a certified trainer who is
-  working the same slot: "John (trained by Jane)". Trainees are extra to the required headcount.
+  working the same slot: "John (trained by Jane)".
 - A rotation that needs three people gets three assignments, which is how a part-day employee's AM block and a colleague's
   PM block add up to full coverage.
-
-### Hard rules (the validator checks all of these)
-Qualification, availability and approved time off, no double-booking, minimum rest between work periods (touching
-blocks count as one period), daily and weekly hour caps, no overstaffing, trainee supervision (a certified trainer is
-working the slot, trainee limits per slot and per trainer). Coverage is *not* a hard rule: an impossible instance
-gets the best partial schedule plus a shortfall report.
-
-### Soft goals (reported as separate metrics, never one magic score)
-Coverage, hour fairness, over and under target hours, preferred days off honored, trainee opportunities.
 
 ## Design decisions
 
@@ -42,10 +30,7 @@ must pass it.
 **Pure-Python core.** `scheduler/` has no web, database, or solver dependencies, so it is fully unit-testable.
 
 **Synthetic instances with a tightness dial.** `generate_instance(seed, tightness=...)` sizes the workforce relative
-to demand, so algorithms can be compared on easy and hard problems across many seeds, not one cherry-picked case.
-
-**Greedy baseline is deliberately reasonable.** Scarcest slots first, least-loaded eligible person, trainees in a second
-pass. The solver has to beat this honestly, and where it doesn't, the README will say so.
+to demand so algorithms can be compared on easy and hard problems across many seeds.
 
 ## Quickstart
 
