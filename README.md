@@ -1,6 +1,6 @@
 # ShiftWise
 
-[![CI](https://github.com/tsundarren/shiftwise/actions/workflows/ci.yml/badge.svg)](https://github.com/tsundarren/shiftwise/actions/workflows/ci.yml)
+[![CI](https://github.com/tsundarren/shift/actions/workflows/ci.yml/badge.svg)](https://github.com/tsundarren/shift/actions/workflows/ci.yml)
 
 A scheduling engine that assigns staff to rotations (tasks or stations) across a week or two,
 respecting hard rules, optimizing soft goals, and explaining its decisions.
