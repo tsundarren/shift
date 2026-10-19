@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
-"""Generate an instance, run the greedy baseline, validate it, and print a readable schedule.
+"""Generate an instance, solve it, validate the result, and print a readable schedule.
 
-    python -m scripts.demo --seed 3 --tightness 0.7 --days 7
+    python -m scripts.demo --seed 3 --tightness 0.7 --days 7 --algo greedy
+    python -m scripts.demo --seed 3 --tightness 1.2 --days 7 --algo cpsat     # needs OR-Tools
 """
 from __future__ import annotations
 
@@ -10,6 +11,7 @@ import argparse
 from scheduler.generate import generate_instance
 from scheduler.greedy import solve_greedy
 from scheduler.metrics import quality_report
+from scheduler.objective import schedule_cost
 from scheduler.validate import validate
 
 WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
@@ -40,12 +42,25 @@ def main() -> None:
     ap.add_argument("--seed", type=int, default=3)
     ap.add_argument("--tightness", type=float, default=0.7)
     ap.add_argument("--days", type=int, default=7)
+    ap.add_argument("--algo", choices=["greedy", "cpsat"], default="greedy")
+    ap.add_argument("--time-limit", type=float, default=10.0)
     args = ap.parse_args()
 
     instance = generate_instance(seed=args.seed, num_days=args.days, tightness=args.tightness)
-    schedule = solve_greedy(instance)
+    if args.algo == "cpsat":
+        from scheduler.cpsat import solve_cpsat
+
+        result = solve_cpsat(instance, time_limit=args.time_limit, workers=8, seed=args.seed)
+        schedule = result.schedule
+        print(f"CP-SAT: {result.status}, gap {result.gap if result.gap is None else format(result.gap, '.1%')}, {result.seconds:.1f}s")
+    else:
+        schedule = solve_greedy(instance)
+
     print(render(instance, schedule))
     print("\nHard-rule violations:", validate(instance, schedule) or "none")
+    cost = schedule_cost(instance, schedule)
+    print(f"\nObjective (lower is better): {cost.total:,}  [coverage {cost.coverage:,}, fairness {cost.fairness:,}, "
+          f"preference {cost.preference:,}, training {cost.training:,}]")
     print("\nQuality:")
     for key, value in quality_report(instance, schedule).as_dict().items():
         print(f"  {key:<22}{value:.1f}" if isinstance(value, float) else f"  {key:<22}{value}")
