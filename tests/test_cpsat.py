@@ -82,7 +82,11 @@ def test_minimum_rest_splits_the_work_between_people():
                     num_days=2, min_rest_minutes=720)
     result = solve_cpsat(lone, **FAST)
     assert validate(lone, result.schedule) == []
-    assert quality_report(lone, result.schedule).seats_filled == 1
+    # Four slots, but Late(day 0) -> AM(day 1) leaves only 11h of rest and AM -> Late on one day leaves 3h.
+    # The most one person can legally cover is two slots (for example both Late shifts, 18h apart).
+    assert quality_report(lone, result.schedule).seats_filled == 2
+    assigned = {a.slot_id for a in result.schedule.assignments}
+    assert not {"r2:0:Late", "r1:1:AM"} <= assigned    # the one pair the rest rule actually forbids
 
 
 def test_touching_blocks_are_one_work_period():
