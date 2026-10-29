@@ -4,6 +4,20 @@ on: [push, pull_request]
 jobs:
   test:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: shift
+          POSTGRES_PASSWORD: shift
+          POSTGRES_DB: shift
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U shift"
+          --health-interval 3s --health-timeout 3s --health-retries 10
+    env:
+      DATABASE_URL: postgresql+psycopg://shift:shift@localhost:5432/shift
+      REQUIRE_DB: "1"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -13,3 +27,27 @@ jobs:
           cache-dependency-path: requirements-dev.txt
       - run: pip install -r requirements-dev.txt
       - run: pytest -v
+
+  image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t shift:ci .
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      # Needs frontend/package-lock.json committed (created by your first local `npm install`).
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build

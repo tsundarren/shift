@@ -21,6 +21,7 @@ from dataclasses import dataclass, field
 
 from .models import Assignment, Instance, Schedule, Slot
 from .objective import Weights, ideal_minutes
+from .overrides import Overrides
 
 
 def _method(obj, snake: str, camel: str):
@@ -65,7 +66,7 @@ class _Built:
     short: dict  # slot_id -> shortage variable
 
 
-def _build(cp, instance: Instance, weights: Weights) -> _Built:
+def _build(cp, instance: Instance, weights: Weights, overrides: Overrides | None = None) -> _Built:
     model = cp.CpModel()
     new_bool = _method(model, "new_bool_var", "NewBoolVar")
     new_int = _method(model, "new_int_var", "NewIntVar")
@@ -101,6 +102,15 @@ def _build(cp, instance: Instance, weights: Weights) -> _Built:
                 options.append((t, p))
             add(_lin_sum(cp, [p for _, p in options]) == var)  # exactly one trainer if attending
             pairs[(e.id, s.id)] = options
+
+    if overrides is not None:
+        for key in sorted(overrides.pins):
+            if key not in x:
+                raise ValueError(f"cannot pin {key}: that assignment is not possible (check_overrides explains why)")
+            add(x[key] == 1)
+        for key in overrides.bans:
+            if key in x:
+                add(x[key] == 0)
 
     short: dict[str, object] = {}
     for s in slots:
@@ -167,7 +177,22 @@ def _build(cp, instance: Instance, weights: Weights) -> _Built:
             if s.rotation_id in emp.in_training:
                 terms.append(-weights.training * s.minutes * v)
 
-    minimize(_lin_sum(cp, terms))
+    # Stability: when revising a schedule, every assignment added or removed costs `stability` per minute.
+    # A kept assignment costs nothing; an old assignment that can no longer exist is a fixed cost.
+    constant = 0
+    if overrides is not None and overrides.previous is not None and weights.stability:
+        previous = {(a.employee_id, a.slot_id) for a in overrides.previous.assignments
+                    if a.employee_id in emps and a.slot_id in instance.slots_by_id}
+        for key in previous:
+            minutes = instance.slots_by_id[key[1]].minutes
+            constant += weights.stability * minutes
+            if key in x:
+                terms.append(-weights.stability * minutes * x[key])
+        for key, var in x.items():
+            if key not in previous:
+                terms.append(weights.stability * instance.slots_by_id[key[1]].minutes * var)
+
+    minimize(_lin_sum(cp, terms) + constant)
     return _Built(model, x, pairs, short)
 
 
@@ -225,11 +250,11 @@ class SolveResult:
 
 
 def solve_cpsat(instance: Instance, *, time_limit: float = 10.0, workers: int = 8, seed: int = 0,
-                weights: Weights = Weights()) -> SolveResult:
+                weights: Weights = Weights(), overrides: Overrides | None = None) -> SolveResult:
     from ortools.sat.python import cp_model  # imported here so the rest of the package needs no OR-Tools
 
     started = time.perf_counter()
-    built = _build(cp_model, instance, weights)
+    built = _build(cp_model, instance, weights, overrides)
     solver = cp_model.CpSolver()
     solver.parameters.max_time_in_seconds = float(time_limit)
     solver.parameters.random_seed = int(seed)
