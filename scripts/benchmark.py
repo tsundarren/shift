@@ -38,6 +38,8 @@ def summarize(records: list[dict]) -> list[dict]:
             worse=sum(1 for r in rs if r["cpsat_cost"] > r["greedy_cost"]),
             optimal_pct=100 * sum(1 for r in rs if r["cpsat_status"] == "OPTIMAL") / len(rs),
             cpsat_seconds=mean("cpsat_seconds"), greedy_seconds=mean("greedy_seconds"),
+            greedy_parts=[statistics.fmean(r["greedy_parts"][i] for r in rs) for i in range(4)],
+            cpsat_parts=[statistics.fmean(r["cpsat_parts"][i] for r in rs) for i in range(4)],
             greedy_valid_pct=100 * sum(1 for r in rs if r["greedy_valid"]) / len(rs),
             cpsat_valid_pct=100 * sum(1 for r in rs if r["cpsat_valid"]) / len(rs),
         ))
@@ -55,6 +57,13 @@ def format_tables(rows: list[dict]) -> str:
     for r in rows:
         out.append(f"| {r['tightness']:.2f} | {r['optimal_pct']:.0f}% | {r['cpsat_seconds']:.2f}s | {r['greedy_seconds'] * 1000:.0f}ms | "
                    f"{r['greedy_valid_pct']:.0f}% | {r['cpsat_valid_pct']:.0f}% |")
+    out += ["", "Mean cost by component (lower is better; training is a reward, so more negative is better):", "",
+            "| Tightness | Coverage: greedy | Coverage: CP-SAT | Fairness: greedy | Fairness: CP-SAT | Preference: greedy | "
+            "Preference: CP-SAT | Training: greedy | Training: CP-SAT |",
+            "|---|---|---|---|---|---|---|---|---|"]
+    for r in rows:
+        cells = [f"{v:,.0f}" for pair in zip(r["greedy_parts"], r["cpsat_parts"]) for v in pair]
+        out.append(f"| {r['tightness']:.2f} | " + " | ".join(cells) + " |")
     return "\n".join(out)
 
 
@@ -72,11 +81,13 @@ def run(args: argparse.Namespace) -> list[dict]:
             result = solve_cpsat(inst, time_limit=args.time_limit, workers=args.workers, seed=seed, weights=weights)
 
             g_report, c_report = quality_report(inst, greedy), quality_report(inst, result.schedule)
+            g_cost, c_cost = schedule_cost(inst, greedy, weights), schedule_cost(inst, result.schedule, weights)
             records.append(dict(
                 tightness=tightness, seed=seed,
                 greedy_coverage=g_report.coverage_pct, cpsat_coverage=c_report.coverage_pct,
-                greedy_cost=schedule_cost(inst, greedy, weights).total,
-                cpsat_cost=schedule_cost(inst, result.schedule, weights).total,
+                greedy_cost=g_cost.total, cpsat_cost=c_cost.total,
+                greedy_parts=(g_cost.coverage, g_cost.fairness, g_cost.preference, g_cost.training),
+                cpsat_parts=(c_cost.coverage, c_cost.fairness, c_cost.preference, c_cost.training),
                 cpsat_status=result.status, cpsat_seconds=result.seconds, greedy_seconds=greedy_seconds,
                 greedy_valid=g_report.valid, cpsat_valid=c_report.valid,
             ))
